@@ -2,22 +2,24 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	rethink "github.com/dancannon/gorethink"
 )
 
 const (
-	dbAddr    = "db:28015"
 	dbName    = "dockerdemo"
 	tblVisits = "visits"
 )
 
 var (
+	dbAddr   string
 	session  *rethink.Session
 	hostname string
 )
@@ -28,22 +30,30 @@ type Visit struct {
 }
 
 func initdb() {
-	var err error
+	// retries
+	for i := 0; i < 5; i++ {
+		s, err := rethink.Connect(rethink.ConnectOpts{
+			Address:  dbAddr,
+			Database: dbName,
+		})
+		if err != nil {
+			log.Printf("unable to connect; retrying: %s", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
 
-	// Create rethinkdb session
-	session, err = rethink.Connect(rethink.ConnectOpts{
-		Address:  dbAddr,
-		Database: dbName,
-	})
-	if err != nil {
-		log.Fatal(err)
+		session = s
+	}
+
+	if session == nil {
+		log.Fatalf("unable to get database connection")
 	}
 
 	// Create database
 	rethink.DBCreate(dbName).Run(session)
 
 	// Check if table exists
-	_, err = rethink.Table(tblVisits).Run(session)
+	_, err := rethink.Table(tblVisits).Run(session)
 	if err != nil {
 		// If not, create it
 		if _, err = rethink.DB(dbName).TableCreate(tblVisits).Run(session); err != nil {
@@ -108,6 +118,9 @@ func handleVisitor(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flag.StringVar(&dbAddr, "addr", "db:28015", "Address of rethinkdb (e.g. db:28015)")
+	flag.Parse()
+
 	var err error
 	hostname, err = os.Hostname()
 	if err != nil {

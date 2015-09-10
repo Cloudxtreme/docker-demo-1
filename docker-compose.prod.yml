@@ -1,0 +1,12 @@
+web:
+    name: web
+    image: tombee/docker-demo-web
+    ports:
+        - 8080
+    command: -addr dockerdemo_db_1.swarm:28015
+
+db:
+    name: rethinkdb
+    image: rethinkdb
+    ports:
+        - "28015:28015"
